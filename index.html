@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Interactivo de Redes - Costa de Oro</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        #map { height: 100vh; width: 100%; z-index: 1; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .leaflet-popup-content-wrapper {
+            padding: 0;
+            overflow: hidden;
+            border-radius: 12px;
+        }
+        .leaflet-popup-content {
+            margin: 0;
+            width: 280px !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 font-sans text-slate-100 flex flex-col md:flex-row h-screen overflow-hidden">
+
+    <!-- Panel Lateral Sidebar -->
+    <aside class="w-full md:w-96 bg-slate-800 border-r border-slate-700 flex flex-col z-10 shadow-xl">
+        <!-- Encabezado -->
+        <div class="p-4 border-b border-slate-700 bg-slate-850 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-blue-600 rounded-lg text-white">
+                    <i class="fa-solid fa-network-wired text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-white leading-tight">Redes Costa de Oro</h1>
+                    <p class="text-xs text-slate-400">Canelones - Gestión de Infraestructura</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Buscador y Filtros -->
+        <div class="p-4 border-b border-slate-700 bg-slate-800/50 space-y-3">
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" id="searchInput" oninput="filterLocations()" placeholder="Buscar balneario o zona..." 
+                    class="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition">
+            </div>
+            <div class="flex items-center justify-between text-xs text-slate-400">
+                <span id="locationCount">Cargando puntos...</span>
+                <span class="inline-flex items-center gap-1 text-emerald-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Sistema Activo
+                </span>
+            </div>
+        </div>
+
+        <!-- Lista de Balnearios y Zonas -->
+        <div id="locationList" class="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+            <!-- Los elementos se generan dinámicamente -->
+        </div>
+
+        <!-- Pie de página informativo -->
+        <div class="p-3 bg-slate-900 border-t border-slate-700 text-center text-xs text-slate-500">
+            Hacé clic en cualquier punto para abrir la red del balneario.
+        </div>
+    </aside>
+
+    <!-- Contenedor Principal del Mapa -->
+    <main class="flex-1 relative h-full">
+        <div id="map"></div>
+
+        <!-- Visor Modal (Lightbox con Zoom) para Imágenes de Redes -->
+        <div id="imageViewer" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col">
+            <!-- Header del Visor -->
+            <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between z-10">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-map-location-dot text-blue-400 text-xl"></i>
+                    <div>
+                        <h2 id="viewerTitle" class="font-bold text-white text-lg">Nombre del Balneario</h2>
+                        <p id="viewerFile" class="text-xs text-slate-400">archivo_plano.jpg</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="zoomIn()" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition" title="Acercar">
+                        <i class="fa-solid fa-magnifying-glass-plus"></i>
+                    </button>
+                    <button onclick="zoomOut()" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition" title="Alejar">
+                        <i class="fa-solid fa-magnifying-glass-minus"></i>
+                    </button>
+                    <button onclick="resetZoom()" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition" title="Restablecer">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                    <button onclick="closeViewer()" class="p-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition ml-2" title="Cerrar">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Área de la imagen con soporte de arrastrar y Zoom -->
+            <div id="viewerCanvas" class="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing flex items-center justify-center p-4">
+                <img id="viewerImage" src="" alt="Plano de Red" class="max-w-none transition-transform duration-75 select-none shadow-2xl rounded">
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Datos geográficos y asociación de planos
+        const locations = [
+            { id: 1, name: "Neptunia - Fortín de Santa Rosa", file: "Neptunia-Fortin.JPG", coords: [-34.783, -55.883], type: "Costa" },
+            { id: 2, name: "Villa Argentina - Parque del Plata", file: "Villa Argentina-Parque del Plata.JPG", coords: [-34.766, -55.783], type: "Costa" },
+            { id: 3, name: "Las Vegas - Guazuvirá", file: "Las Vegas-Guazuvira.JPG", coords: [-34.762, -55.683], type: "Costa" },
+            { id: 4, name: "San Luis - Santa Lucía del Este", file: "San Luis-Santa Lucia del Este.JPG", coords: [-34.755, -55.583], type: "Costa" },
+            { id: 5, name: "Biarritz - Jaureguiberry", file: "Biarritz-Jaureguiberry.JPG", coords: [-34.788, -55.450], type: "Costa" },
+            { id: 6, name: "Soca", file: "Soca.JPG", coords: [-34.685, -55.683], type: "Interior" },
+            { id: 7, name: "Piedras de Afilar", file: "Piedras de Afilar.JPG", coords: [-34.662, -55.510], type: "Interior" },
+            { id: 8, name: "Estación Piedras de Afilar", file: "Estacion Piedras de Afilar.JPG", coords: [-34.680, -55.500], type: "Interior" },
+            { id: 9, name: "Paso de la Carreta", file: "Paso de la Carreta.JPG", coords: [-34.650, -55.600], type: "Interior" }
+        ];
+
+        // Inicializar el mapa
+        const map = L.map('map', {
+            zoomControl: false
+        }).setView([-34.75, -55.65], 11);
+
+        // Control de Zoom de Leaflet posicionado abajo a la derecha
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // Capa de Mapa Gratuita sin API Key (Esri World Street Map)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom',
+            maxZoom: 18
+        }).addTo(map);
+
+        const markers = {};
+
+        // Icono personal para los marcadores
+        function createCustomIcon(isCoastal) {
+            return L.divIcon({
+                className: 'custom-pin',
+                html: `
+                    <div class="relative group">
+                        <div class="w-8 h-8 ${isCoastal ? 'bg-blue-600' : 'bg-amber-600'} rounded-full flex items-center justify-center text-white shadow-lg transform transition group-hover:scale-110 border-2 border-white">
+                            <i class="fa-solid ${isCoastal ? 'fa-water' : 'fa-faucet'} text-sm"></i>
+                        </div>
+                        <div class="w-2 h-2 ${isCoastal ? 'bg-blue-600' : 'bg-amber-600'} rotate-45 absolute -bottom-1 left-3"></div>
+                    </div>
+                `,
+                iconSize: [32, 32],
+                iconAnchor: [16, 32]
+            });
+        }
+
+        // Cargar marcadores y construir panel
+        function renderLocations() {
+            const listContainer = document.getElementById('locationList');
+            listContainer.innerHTML = '';
+
+            locations.forEach(loc => {
+                const isCoastal = loc.type === "Costa";
+                
+                // Marcador en el Mapa
+                const marker = L.marker(loc.coords, { icon: createCustomIcon(isCoastal) }).addTo(map);
+                
+                const popupContent = `
+                    <div class="bg-slate-900 text-slate-100 p-3 rounded-lg">
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded ${isCoastal ? 'bg-blue-900/60 text-blue-300 border border-blue-700' : 'bg-amber-900/60 text-amber-300 border border-amber-700'}">
+                            ${loc.type.toUpperCase()}
+                        </span>
+                        <h3 class="font-bold text-sm text-white mt-1 mb-2">${loc.name}</h3>
+                        <button onclick="openViewer('${loc.name}', '${loc.file}')" 
+                            class="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-2 px-3 rounded flex items-center justify-center gap-2 transition">
+                            <i class="fa-solid fa-expand"></i> Ver Plano de Red
+                        </button>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent);
+                markers[loc.id] = marker;
+
+                // Tarjeta en la barra lateral
+                const card = document.createElement('div');
+                card.className = "p-3 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl cursor-pointer transition flex items-center justify-between group";
+                card.onclick = () => focusLocation(loc.id);
+                card.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg ${isCoastal ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'} flex items-center justify-center group-hover:scale-105 transition">
+                            <i class="fa-solid ${isCoastal ? 'fa-water' : 'fa-route'}"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-sm text-slate-200 group-hover:text-white transition">${loc.name}</h4>
+                            <p class="text-xs text-slate-400">${loc.file}</p>
+                        </div>
+                    </div>
+                    <button onclick="event.stopPropagation(); openViewer('${loc.name}', '${loc.file}')" class="p-2 bg-slate-700 hover:bg-blue-600 text-slate-300 hover:text-white rounded-lg transition" title="Ver Red">
+                        <i class="fa-solid fa-map"></i>
+                    </button>
+                `;
+                listContainer.appendChild(card);
+            });
+
+            document.getElementById('locationCount').innerText = `${locations.length} zonas disponibles`;
+        }
+
+        // Enfocar punto al tocar tarjeta
+        function focusLocation(id) {
+            const loc = locations.find(l => l.id === id);
+            if (loc) {
+                map.flyTo(loc.coords, 14, { duration: 1.2 });
+                markers[id].openPopup();
+            }
+        }
+
+        // Filtrar lista en tiempo real
+        function filterLocations() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = locations.filter(l => l.name.toLowerCase().includes(query));
+            
+            const listContainer = document.getElementById('locationList');
+            listContainer.innerHTML = '';
+
+            filtered.forEach(loc => {
+                const isCoastal = loc.type === "Costa";
+                const card = document.createElement('div');
+                card.className = "p-3 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl cursor-pointer transition flex items-center justify-between group";
+                card.onclick = () => focusLocation(loc.id);
+                card.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg ${isCoastal ? 'bg-blue-500/10 text-blue-400' : 'bg-amber-500/10 text-amber-400'} flex items-center justify-center">
+                            <i class="fa-solid ${isCoastal ? 'fa-water' : 'fa-route'}"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-sm text-slate-200">${loc.name}</h4>
+                            <p class="text-xs text-slate-400">${loc.file}</p>
+                        </div>
+                    </div>
+                    <button onclick="event.stopPropagation(); openViewer('${loc.name}', '${loc.file}')" class="p-2 bg-slate-700 hover:bg-blue-600 text-slate-300 hover:text-white rounded-lg transition">
+                        <i class="fa-solid fa-map"></i>
+                    </button>
+                `;
+                listContainer.appendChild(card);
+            });
+
+            document.getElementById('locationCount').innerText = `${filtered.length} zonas encontradas`;
+        }
+
+        // Lógica del Visor de Imágenes (Lightbox)
+        let currentScale = 1;
+        let isDragging = false;
+        let startX, startY, translateX = 0, translateY = 0;
+
+        const imgElement = document.getElementById('viewerImage');
+        const canvasElement = document.getElementById('viewerCanvas');
+
+        function openViewer(title, filename) {
+            document.getElementById('viewerTitle').innerText = title;
+            document.getElementById('viewerFile').innerText = filename;
+            imgElement.src = filename;
+            document.getElementById('imageViewer').classList.remove('hidden');
+            resetZoom();
+        }
+
+        function closeViewer() {
+            document.getElementById('imageViewer').classList.add('hidden');
+        }
+
+        function updateTransform() {
+            imgElement.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
+        }
+
+        function zoomIn() {
+            currentScale *= 1.25;
+            updateTransform();
+        }
+
+        function zoomOut() {
+            if (currentScale > 0.5) {
+                currentScale /= 1.25;
+                updateTransform();
+            }
+        }
+
+        function resetZoom() {
+            currentScale = 1;
+            translateX = 0;
+            translateY = 0;
+            updateTransform();
+        }
+
+        // Arrastrar la imagen libremente con el puntero
+        canvasElement.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // Zoom con la rueda del ratón
+        canvasElement.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                zoomIn();
+            } else {
+                zoomOut();
+            }
+        });
+
+        // Inicializar
+        renderLocations();
+    </script>
+</body>
+</html>
